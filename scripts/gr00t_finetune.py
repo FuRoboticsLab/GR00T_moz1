@@ -32,6 +32,8 @@ from gr00t.model.gr00t_n1 import GR00T_N1_5
 from gr00t.model.transforms import EMBODIMENT_TAG_MAPPING
 from gr00t.utils.peft import get_lora_model
 
+import torch.multiprocessing as mp
+mp.set_sharing_strategy("file_system")
 
 @dataclass
 class ArgsConfig:
@@ -343,6 +345,12 @@ def main(config: ArgsConfig):
         )
 
     # 2.1 modify training args
+    # NOTE: transformers 要求 dataloader_prefetch_factor 只在 num_workers > 0 时设置，
+    # 否则会报错，这里做一个兼容处理。
+    dataloader_prefetch_factor = (
+        config.dataloader_prefetch_factor if config.dataloader_num_workers > 0 else None
+    )
+
     training_args = TrainingArguments(
         output_dir=config.output_dir,
         run_name=None,
@@ -355,7 +363,8 @@ def main(config: ArgsConfig):
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         dataloader_num_workers=config.dataloader_num_workers,
         dataloader_pin_memory=False,
-        dataloader_prefetch_factor=config.dataloader_prefetch_factor,
+        # dataloader_prefetch_factor=config.dataloader_prefetch_factor,
+        dataloader_prefetch_factor=dataloader_prefetch_factor,
         dataloader_persistent_workers=config.dataloader_num_workers > 0,
         optim="adamw_torch",
         adam_beta1=0.95,

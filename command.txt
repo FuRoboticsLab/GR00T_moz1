@@ -1,0 +1,34 @@
+conda activate gr00t
+
+cd /inspire/hdd/global_user/wangtianyu-253107140028/GR00T_moz1
+
+export WANDB_MODE=offline
+
+python scripts/gr00t_finetune.py \
+  --dataset-path /inspire/hdd/global_user/wangtianyu-253107140028/moz1_data/moz1_folding_success \
+  --data-config moz1_bimanual_cart \
+  --embodiment-tag new_embodiment \
+  --num-gpus 2 \
+  --batch-size 48 \
+  --max-steps 10000 \
+  --dataloader-num-workers 0 \
+  --dataloader-prefetch-factor 1 \
+  --base-model-path /inspire/hdd/global_user/wangtianyu-253107140028/huggingface/GR00T-N1.5-3B \
+  --output-dir ./moz1-folding-checkpoints \
+  --video-backend torchvision_av \
+  --report-to wandb
+
+
+========================================================================================================
+
+python scripts/eval_policy_moz1.py --plot \
+  --embodiment-tag new_embodiment \
+  --model-path ./moz1-folding-checkpoints/checkpoint-10000 \
+  --data-config moz1_bimanual_cart \
+  --dataset-path /inspire/hdd/global_user/wangtianyu-253107140028/moz1_data/moz1_folding_success \
+  --video-backend torchvision_av \
+  --modality-keys left_arm_cart_pos right_arm_cart_pos left_gripper_pos right_gripper_pos \
+  --steps 150 \
+  --trajs 5 \
+  --start-traj 0 \
+  --save-plot-path ./moz1_eval_traj0.png

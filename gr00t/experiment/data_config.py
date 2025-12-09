@@ -549,6 +549,135 @@ class BimanualPandaHandDataConfig(BimanualPandaGripperDataConfig):
 ###########################################################################################
 
 
+class Moz1BimanualCartPosDataConfig(BaseDataConfig):
+    """
+    适配 MOZ1 双臂机器人（叠衣服任务）的 DataConfig。
+
+    这里假设在数据集的 `meta/modality.json` 中，已经将原始特征命名为：
+      - state:
+          left_arm_cart_pos       -> 映射自 leftarm_state_cart_pos
+          right_arm_cart_pos      -> 映射自 rightarm_state_cart_pos
+          left_gripper_pos        -> 映射自 leftarm_gripper_state_pos
+          right_gripper_pos       -> 映射自 rightarm_gripper_state_pos
+          torso_cart_pos          -> 映射自 torso_state_cart_pos
+          base_speed              -> 映射自 base_state_speed
+      - action:
+          left_arm_cart_pos       -> 映射自 leftarm_cmd_cart_pos
+          right_arm_cart_pos      -> 映射自 rightarm_cmd_cart_pos
+          left_gripper_pos        -> 映射自 leftarm_gripper_cmd_pos
+          right_gripper_pos       -> 映射自 rightarm_gripper_cmd_pos
+          torso_cart_pos          -> 映射自 torso_cmd_cart_pos
+          base_speed              -> 映射自 base_cmd_speed
+      - video:
+          cam_high, cam_left_wrist, cam_right_wrist
+
+    也就是说，在 modality.json 里会出现的 key 形如：
+      - state.left_arm_cart_pos, action.left_arm_cart_pos
+      - video.cam_high, video.cam_left_wrist, video.cam_right_wrist
+    """
+
+    video_keys = [
+        "video.cam_high",
+        "video.cam_left_wrist",
+        "video.cam_right_wrist",
+    ]
+
+    state_keys = [
+        "state.left_arm_cart_pos",
+        "state.right_arm_cart_pos",
+        "state.left_gripper_pos",
+        "state.right_gripper_pos",
+        "state.torso_cart_pos",
+        "state.base_speed",
+    ]
+
+    action_keys = [
+        "action.left_arm_cart_pos",
+        "action.right_arm_cart_pos",
+        "action.left_gripper_pos",
+        "action.right_gripper_pos",
+        "action.torso_cart_pos",
+        "action.base_speed",
+    ]
+
+    # 目前没有语言指令，保持空列表即可（不会创建 language modality）
+    language_keys: list[str] = []
+
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+    # 用于 StateActionTransform 的归一化与旋转配置
+    state_normalization_modes = {
+        "state.left_arm_cart_pos": "min_max",
+        "state.right_arm_cart_pos": "min_max",
+        "state.left_gripper_pos": "min_max",
+        "state.right_gripper_pos": "min_max",
+        "state.torso_cart_pos": "min_max",
+        "state.base_speed": "min_max",
+    }
+    # 这些状态全部是笛卡尔 / 位置量，无需做旋转 6D 映射
+    state_target_rotations: dict[str, str] = {}
+
+    action_normalization_modes = {
+        "action.left_arm_cart_pos": "min_max",
+        "action.right_arm_cart_pos": "min_max",
+        "action.left_gripper_pos": "min_max",
+        "action.right_gripper_pos": "min_max",
+        "action.torso_cart_pos": "min_max",
+        "action.base_speed": "min_max",
+    }
+
+    def transform(self) -> ModalityTransform:
+        transforms = [
+            # video transforms
+            VideoToTensor(apply_to=self.video_keys),
+            VideoCrop(apply_to=self.video_keys, scale=0.95),
+            VideoResize(
+                apply_to=self.video_keys,
+                height=224,
+                width=224,
+                interpolation="linear",
+            ),
+            VideoColorJitter(
+                apply_to=self.video_keys,
+                brightness=0.3,
+                contrast=0.4,
+                saturation=0.5,
+                hue=0.08,
+            ),
+            VideoToNumpy(apply_to=self.video_keys),
+            # state transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes=self.state_normalization_modes,
+                target_rotations=self.state_target_rotations,
+            ),
+            # action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes=self.action_normalization_modes,
+            ),
+            # concat transforms
+            ConcatTransform(
+                video_concat_order=self.video_keys,
+                state_concat_order=self.state_keys,
+                action_concat_order=self.action_keys,
+            ),
+            GR00TTransform(
+                state_horizon=len(self.observation_indices),
+                action_horizon=len(self.action_indices),
+                max_state_dim=64,
+                max_action_dim=32,
+            ),
+        ]
+
+        return ComposedModalityTransform(transforms=transforms)
+
+
+###########################################################################################
+
 class SinglePandaGripperDataConfig(BimanualPandaGripperDataConfig):
     video_keys = [
         "video.left_view",
@@ -785,4 +914,6 @@ DATA_CONFIG_MAP = {
     "unitree_g1_full_body": UnitreeG1FullBodyDataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
     "agibot_genie1": AgibotGenie1DataConfig(),
+    # custom moz1 embodiment
+    "moz1_bimanual_cart": Moz1BimanualCartPosDataConfig(),
 }
